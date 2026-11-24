@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = 5173;
+const PORT = process.env.PORT || 5173;
 const ROOT = __dirname;
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -35,28 +35,20 @@ function scanRootPhotos() {
       const st = fs.statSync(abs);
       if (!st.isFile()) continue;
       const base = name.replace(/\.[^.]+$/, "");
-      // 哈希风格的长文件名不适合做相框标题，换成简短 label
       const title = /^[0-9a-f]{16,}$/i.test(base) ? "" : base;
-      out.push({
-        name: title,
-        url: "/" + encodeURIComponent(name),   // 中文文件名安全编码
-        mtime: st.mtimeMs,
-      });
+      out.push({ name: title, url: "/" + encodeURIComponent(name), mtime: st.mtimeMs });
     } catch (e) { /* 跳过无法读取的文件 */ }
   }
-  // 按修改时间排序，先放的图在前面，顺序稳定
   out.sort((a, b) => a.mtime - b.mtime);
   return out;
 }
 
 const server = http.createServer((req, res) => {
-  // 统一解码 URL（支持中文文件名），去掉查询串
   let urlPath;
   try { urlPath = decodeURIComponent((req.url || "/").split("?")[0]); }
   catch (e) { urlPath = req.url || "/"; }
   if (urlPath === "/") urlPath = "/index.html";
 
-  // API：列出根目录图片
   if (urlPath === "/api/photos") {
     const body = JSON.stringify({ photos: scanRootPhotos() });
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
@@ -64,7 +56,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 静态文件：限制在根目录内，防止路径穿越
   const fp = path.resolve(ROOT, "." + urlPath);
   if (fp !== ROOT && !fp.startsWith(ROOT + path.sep)) {
     res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
@@ -84,8 +75,8 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`✅ Server running at http://127.0.0.1:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Server running on port ${PORT}`);
   const n = scanRootPhotos().length;
   console.log(`🖼️  根目录检测到 ${n} 张图片，将自动挂到树上`);
 });
